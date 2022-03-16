@@ -3,6 +3,9 @@
 
 #include <iostream>
 #include <d3d11.h>
+extern "C" {
+#include <libavcodec/avcodec.h>
+}
 
 class CD3DRender {
 public:
@@ -14,7 +17,8 @@ public:
 public:
     bool Init(HWND window);
     void SetViewport(UINT32 width, UINT32 height);
-    void RenderFrame();
+    void RenderFrame(AVFrame * frame);
+    ID3D11Device * GetD3DDevice() { return this->m_pDevice; }
 
 private:
     void SetShaderResViewDesc(D3D11_SHADER_RESOURCE_VIEW_DESC* desc,

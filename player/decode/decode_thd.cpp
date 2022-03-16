@@ -5,13 +5,16 @@
 #include "decode_thd.h"
 #include <memory>
 extern "C" {
+#include <libavutil/pixfmt.h>
+#include <libavutil/imgutils.h>
 #include <libavutil/hwcontext_d3d11va.h>
 }
+#include "../time.h"
 
 AVPixelFormat CDecodeThd::m_eHwPixFmt = AV_PIX_FMT_NONE;
 
-CDecodeThd::CDecodeThd(const std::string &file_path, ID3D11Device * d3d_device) 
-: m_sFileName(file_path), m_pD3DDevice(d3d_device) {
+CDecodeThd::CDecodeThd(const std::string &file_path, HWND window) 
+: m_sFileName(file_path), m_WindowHandle(window) {
 
 }
 
@@ -22,10 +25,13 @@ void CDecodeThd::StartThd(){
 }
 
 void CDecodeThd::run(){
+    this->m_pRenderDevice = std::make_unique<CD3DRender>();
+    this->m_pRenderDevice->Init(this->m_WindowHandle);
+
     _GetViodeSupportHWDevices();
 
     AVFormatContext *pFormatContex = nullptr;
-    std::string sFileName = "C:\\Users\\MMK\\Desktop\\Ocean2.mp4";
+    std::string sFileName = m_sFileName;
     int iRet = ::avformat_open_input(&pFormatContex, sFileName.c_str(), NULL, NULL);
     if (!pFormatContex)
     {
@@ -99,7 +105,10 @@ void CDecodeThd::run(){
     AVFrame *pHwFrame = av_frame_alloc();
     AVFrame *pResultFrame = nullptr;
 
+    int64_t frame_count = 0;
+    int64_t total_time = 0;
     while (true) {
+        Timer count;
         if (::av_read_frame(pFormatContex, pPack) != 0){
             break;
         }
@@ -116,13 +125,22 @@ void CDecodeThd::run(){
             std::shared_ptr<AVFrame> pFramePtr(av_frame_alloc(), [](AVFrame* p){
                 av_frame_free(&p);
             });
+
+            std::shared_ptr<AVFrame> pRecieveFramePtr(av_frame_alloc(), [](AVFrame* p){
+                av_frame_free(&p);
+            });
             while (0 == ::avcodec_receive_frame(m_pCodeContext, pFramePtr.get())){
                 // 硬解改动
                 if (pFramePtr->format == m_eHwPixFmt) {
                     /* retrieve data from GPU to CPU */
-                        
+                    printf("###############frame format is: %s \n", av_get_pix_fmt_name(static_cast<AVPixelFormat>(pFramePtr->format)));
+                    this->m_pRenderDevice->RenderFrame(pFramePtr.get());
+                    
+                    frame_count += 1;
+                    total_time += count.elapsed();
+                    printf("############### decode and render cost milliseconds: %d \n", count.elapsed());
                 } else{
-//                    printf("###################software decode a frame success \n");
+                   printf("###################software decode a frame success \n");
 //                    pResultFrame = pFrameOrg;
                 }
                 // 硬解改动
@@ -132,6 +150,8 @@ void CDecodeThd::run(){
         ::av_packet_unref(pPack);
     }
 
+    float average_time = (float)total_time / (float)frame_count;
+    printf("total frame count: %d , total_time: %d average cost time every frame: %f \n", frame_count, total_time, average_time);
     ::av_packet_free(&pPack);
 }
 
@@ -150,13 +170,13 @@ void CDecodeThd::_InitVideoFormat(AVFormatContext *_pAVFormatContext, int _iStre
     if (iRet < 0){
         printf("#######################avcodec_parameters_to_context fail \n");
     }
-    m_pCodeContext->get_format  = _GetHwFormat;
+    // m_pCodeContext->get_format  = _GetHwFormat;
 
     // 创建硬件解码器
     AVBufferRef* hw_device_ctx =  av_hwdevice_ctx_alloc(m_eHWDeviceType);
     AVHWDeviceContext* device_ctx = reinterpret_cast<AVHWDeviceContext*>(hw_device_ctx->data);
     AVD3D11VADeviceContext* d3d11va_device = reinterpret_cast<AVD3D11VADeviceContext*>(device_ctx->hwctx);
-    d3d11va_device->device = m_pD3DDevice;
+    d3d11va_device->device = m_pRenderDevice->GetD3DDevice();
     iRet = av_hwdevice_ctx_init(hw_device_ctx);
     if (iRet != 0) {
         printf("#######################av_hwdevice_ctx_init fail \n");

@@ -9,15 +9,18 @@
 #include <thread>
 #include <vector>
 #include <string>
+#include <memory>
 #include <d3d11.h>
+#include <windows.h>
 extern "C"{
-#include <libavformat/avformat.h>
 #include <libavcodec/avcodec.h>
+#include <libavformat/avformat.h>
 }
+#include "../d3drender.h"
 
 class CDecodeThd {
 public:
-    CDecodeThd(const std::string &file_path, ID3D11Device* d3d_device);
+    CDecodeThd(const std::string &file_path, HWND window);
     ~CDecodeThd() = default;
     CDecodeThd(const CDecodeThd&) = delete;
     CDecodeThd& operator=(const CDecodeThd&) = delete;
@@ -53,7 +56,8 @@ private:
     AVHWDeviceType m_eHWDeviceType = AV_HWDEVICE_TYPE_D3D11VA;
 
     std::string m_sFileName;
-    ID3D11Device* m_pD3DDevice = nullptr;    // d3ddevice        
+    std::unique_ptr<CD3DRender> m_pRenderDevice = nullptr;    // d3ddevice
+    HWND m_WindowHandle;   
 };
 
 

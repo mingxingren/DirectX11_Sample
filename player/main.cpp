@@ -2,9 +2,10 @@
 #include <memory>
 #include <windows.h>
 #include "d3drender.h"
+#include "decode/decode_thd.h"
 
-#define DIALOG_WIDTH 1366
-#define DIALOG_HEIGHT 768
+#define DIALOG_WIDTH 1600
+#define DIALOG_HEIGHT 1200
 
 LRESULT CALLBACK WindowProc(_In_ HWND hwnd, 
                             _In_ UINT uMsg, 
@@ -35,8 +36,8 @@ _In_ LPSTR lpCmdLine, _In_ int nCmdShow) {
     HWND hwnd = CreateWindowA((const char*)class_name.data(), 
                 title_name, 
                 WS_OVERLAPPEDWINDOW,    // 窗口外观样式
-                800,     // 窗口相对于父级的X坐标
-                600,     // 窗口相对于父级的Y坐标
+                200,     // 窗口相对于父级的X坐标
+                200,     // 窗口相对于父级的Y坐标
                 DIALOG_WIDTH,    // 窗口宽度
                 DIALOG_HEIGHT,   // 窗口高度
                 NULL,   // 父窗口句柄
@@ -53,20 +54,21 @@ _In_ LPSTR lpCmdLine, _In_ int nCmdShow) {
     // 更新窗口
     UpdateWindow(hwnd);
 
-    // 创建
-    CD3DRender render;
-    if (!render.Init(hwnd)) {
-        return 0;
-    }
+    // // 创建渲染设备
+    // CD3DRender render;
+    // if (!render.Init(hwnd)) {
+    //     return 0;
+    // }
 
+    // 创建解码线程
+    CDecodeThd decode_thread("C:\\Users\\MMK\\Desktop\\DDATest_3.h264", hwnd);
+    decode_thread.StartThd();
 
     // 消息循环
     MSG msg;
     while (GetMessage(&msg, NULL, 0, 0) > 0) {
         TranslateMessage(&msg);
         DispatchMessage(&msg);
-
-        render.RenderFrame();
     }
 
     return 0;

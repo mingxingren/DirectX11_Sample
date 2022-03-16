@@ -5,15 +5,14 @@
 #include "common_type.h"
 #include "shader/fragment_shader.inc"
 #include "shader/vertex_shader.inc"
-#include "yuv_file.h"
 
 #define CHECK_AND_RETURN(x) if (x < 0) { \
     printf("##########file: %s,  line: %d, error: %x \n", __FILE__, __LINE__, x); \
     return false; \
 }
 
-#define TEXTURE_WIDTH 1366
-#define TEXTURE_HEIGHT 768
+#define TEXTURE_WIDTH 2560
+#define TEXTURE_HEIGHT 1440
 
 using DirectX::XMFLOAT3;
 using DirectX::XMFLOAT2;
@@ -206,8 +205,8 @@ bool CD3DRender::Init(HWND window) {
     // this->m_pDeviceContext->Unmap(this->m_pTexture, subresource);
 
 
-    NV12Frame* flie_frame = ReadNV12FromFile();
-    WriteNV12ToTexture(flie_frame, this->m_pDeviceContext, this->m_pTexture);
+    // NV12Frame* flie_frame = ReadNV12FromFile();
+    // WriteNV12ToTexture(flie_frame, this->m_pDeviceContext, this->m_pTexture);
 
     return true;
 }
@@ -223,7 +222,14 @@ void CD3DRender::SetViewport(UINT32 width, UINT32 height) {
     this->m_pDeviceContext->RSSetViewports(1, &vp);
 }
 
-void CD3DRender::RenderFrame() {
+void CD3DRender::RenderFrame(AVFrame * frame) {
+    // 将FFMPEG的数据拷入到共享纹理中
+    ID3D11Texture2D* new_texture= (ID3D11Texture2D*)frame->data[0];
+    int64_t new_texture_index = (int64_t)frame->data[1];
+    this->m_pDeviceContext->CopySubresourceRegion(this->m_pTexture, 0, 0, 0, 0,  
+                                                new_texture, new_texture_index, nullptr);
+
+
     VERTEX Vertices[NUMVERTICES] = {
         { XMFLOAT3(-1.0f, -1.0f, 0), XMFLOAT2(0.0f, 1.0f) },
         { XMFLOAT3(-1.0f, 1.0f, 0), XMFLOAT2(0.0f, 0.0f) },
