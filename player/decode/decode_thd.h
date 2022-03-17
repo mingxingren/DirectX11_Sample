@@ -9,7 +9,6 @@
 #include <thread>
 #include <vector>
 #include <string>
-#include <memory>
 #include <d3d11.h>
 #include <windows.h>
 extern "C"{
@@ -20,7 +19,7 @@ extern "C"{
 
 class CDecodeThd {
 public:
-    CDecodeThd(const std::string &file_path, HWND window);
+    CDecodeThd(const std::string &file_path, CD3DRender* render);
     ~CDecodeThd() = default;
     CDecodeThd(const CDecodeThd&) = delete;
     CDecodeThd& operator=(const CDecodeThd&) = delete;
@@ -56,8 +55,7 @@ private:
     AVHWDeviceType m_eHWDeviceType = AV_HWDEVICE_TYPE_D3D11VA;
 
     std::string m_sFileName;
-    std::unique_ptr<CD3DRender> m_pRenderDevice = nullptr;    // d3ddevice
-    HWND m_WindowHandle;   
+    CD3DRender* m_pRenderDevice = nullptr;    // d3ddevice 
 };
 
 

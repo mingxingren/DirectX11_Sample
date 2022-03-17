@@ -54,14 +54,14 @@ _In_ LPSTR lpCmdLine, _In_ int nCmdShow) {
     // 更新窗口
     UpdateWindow(hwnd);
 
-    // // 创建渲染设备
-    // CD3DRender render;
-    // if (!render.Init(hwnd)) {
-    //     return 0;
-    // }
+    // 创建渲染设备
+    CD3DRender render;
+    if (!render.Init(hwnd)) {
+        return 0;
+    }
 
     // 创建解码线程
-    CDecodeThd decode_thread("C:\\Users\\MMK\\Desktop\\DDATest_3.h264", hwnd);
+    CDecodeThd decode_thread("C:\\Users\\MMK\\Desktop\\DDATest_3.h264", &render);
     decode_thread.StartThd();
 
     // 消息循环

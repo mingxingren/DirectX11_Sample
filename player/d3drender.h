@@ -3,9 +3,12 @@
 
 #include <iostream>
 #include <d3d11.h>
+#include <wrl/client.h>
 extern "C" {
 #include <libavcodec/avcodec.h>
 }
+
+using namespace Microsoft::WRL;
 
 class CD3DRender {
 public:
@@ -21,6 +24,9 @@ public:
     ID3D11Device * GetD3DDevice() { return this->m_pDevice; }
 
 private:
+    bool InitDevice(HWND window, int dialog_width, int dialog_height);  // 初始化 ID3DDevice
+    bool InitShader();  // 初始化 shader
+    bool ReinitTexture(DXGI_FORMAT img_format, int width, int height);  // 重新初始化纹理
     void SetShaderResViewDesc(D3D11_SHADER_RESOURCE_VIEW_DESC* desc,
                             _In_ ID3D11Texture2D* pTex2D,
                             D3D11_SRV_DIMENSION viewDimension,
@@ -31,24 +37,16 @@ private:
                             UINT arraySize = -1 );
 
 private:
+    HWND m_iWindow = nullptr;
     ID3D11Device* m_pDevice = nullptr;
     ID3D11DeviceContext* m_pDeviceContext = nullptr;
-    ID3D11Texture2D* m_pSharedSurf = nullptr;
-    ID3D11Texture2D* m_pAccessibleSurf = nullptr;
-    IDXGISwapChain* m_pSwapChain = nullptr;
-    
+    IDXGISwapChain* m_pSwapChain = nullptr;     // 交换链
+    ID3D11RenderTargetView* m_pRTV = nullptr;
+
     ID3D11Texture2D* m_pTexture = nullptr;
     ID3D11ShaderResourceView* m_pLuminanceView = nullptr;
     ID3D11ShaderResourceView* m_pChrominanceView = nullptr;
-
-    uint32_t m_width = 0;
-    uint32_t m_height = 0;
-
-    HWND m_iWindow = nullptr;
-
-private:
     IDXGIFactory* m_pFactory = nullptr;
-    ID3D11RenderTargetView* m_pRTV = nullptr;
     ID3D11VertexShader* m_pVertexShader = nullptr;  // 顶点着色器
     ID3D11PixelShader* m_pPixelShader = nullptr;    // 片段着色器
     ID3D11InputLayout* m_pInputLayout = nullptr;

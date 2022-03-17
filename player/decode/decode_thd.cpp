@@ -13,8 +13,8 @@ extern "C" {
 
 AVPixelFormat CDecodeThd::m_eHwPixFmt = AV_PIX_FMT_NONE;
 
-CDecodeThd::CDecodeThd(const std::string &file_path, HWND window) 
-: m_sFileName(file_path), m_WindowHandle(window) {
+CDecodeThd::CDecodeThd(const std::string &file_path, CD3DRender* render) 
+: m_sFileName(file_path), m_pRenderDevice(render) {
 
 }
 
@@ -25,9 +25,6 @@ void CDecodeThd::StartThd(){
 }
 
 void CDecodeThd::run(){
-    this->m_pRenderDevice = std::make_unique<CD3DRender>();
-    this->m_pRenderDevice->Init(this->m_WindowHandle);
-
     _GetViodeSupportHWDevices();
 
     AVFormatContext *pFormatContex = nullptr;
