@@ -136,12 +136,7 @@ void CDecodeThd::run(){
                     frame_count += 1;
                     total_time += count.elapsed();
                     printf("############### decode and render cost milliseconds: %d \n", count.elapsed());
-                } else{
-                   printf("###################software decode a frame success \n");
-//                    pResultFrame = pFrameOrg;
                 }
-                // 硬解改动
-
             }
         }
         ::av_packet_unref(pPack);

@@ -21,60 +21,7 @@ CD3DRender::CD3DRender() {
 }
 
 CD3DRender::~CD3DRender() {
-    if (this->m_pRTV) {
-        this->m_pRTV->Release();
-        this->m_pRTV = nullptr;
-    }
 
-    if (this->m_pDeviceContext) {
-        this->m_pDeviceContext->Release();
-        this->m_pDeviceContext = nullptr;
-    }
-
-    if (this->m_pDevice) {
-        this->m_pDevice->Release();
-        this->m_pDevice = nullptr;
-    }
-
-    if (this->m_pSwapChain) {
-        this->m_pSwapChain->Release();
-        this->m_pSwapChain = nullptr;
-    }
-
-    if (this->m_pLuminanceView) {
-        this->m_pLuminanceView->Release();
-        this->m_pLuminanceView = nullptr;
-    }
-
-    if (this->m_pChrominanceView) {
-        this->m_pChrominanceView->Release();
-        this->m_pChrominanceView = nullptr;
-    }
-
-    if (this->m_pFactory) {
-        this->m_pFactory->Release();
-        this->m_pFactory = nullptr;
-    }
-
-    if (this->m_pVertexShader) {
-        this->m_pVertexShader->Release();
-        this->m_pVertexShader = nullptr;
-    }
-
-    if (this->m_pPixelShader) {
-        this->m_pPixelShader->Release();
-        this->m_pPixelShader = nullptr;
-    }
-
-    if (this->m_pInputLayout) {
-        this->m_pInputLayout->Release();
-        this->m_pInputLayout = nullptr;
-    }
-
-    if (this->m_pPSSamplerState) {
-        this->m_pPSSamplerState->Release();
-        this->m_pPSSamplerState = nullptr;
-    }
 }
 
 bool CD3DRender::Init(HWND window) {
@@ -104,13 +51,11 @@ bool CD3DRender::Init(HWND window) {
     ComPtr<ID3D11Texture2D> back_buffer = nullptr;
     // 获取交换链的缓冲区纹理
     HRESULT res = this->m_pSwapChain->GetBuffer(0, __uuidof(ID3D11Texture2D), 
-                                                reinterpret_cast<void**>(back_buffer.ReleaseAndGetAddressOf()));
+                                                reinterpret_cast<void**>(back_buffer.GetAddressOf()));
     CHECK_AND_RETURN(res)
     // 创建渲染目标的视图
-    res = this->m_pDevice->CreateRenderTargetView(back_buffer.Get(), nullptr, &m_pRTV);
+    res = this->m_pDevice->CreateRenderTargetView(back_buffer.Get(), nullptr, m_pRTV.GetAddressOf());
     CHECK_AND_RETURN(res)
-    // 将目标渲染视图结合到管线
-    this->m_pDeviceContext->OMSetRenderTargets(1, &m_pRTV, nullptr);
     
     // 设置窗口输出大小
     this->SetViewport(dialog_width, dialog_height);
@@ -133,64 +78,23 @@ void CD3DRender::RenderFrame(AVFrame * frame) {
     // 将FFMPEG的数据拷入到共享纹理中
     ID3D11Texture2D* new_texture= (ID3D11Texture2D*)frame->data[0];
     int64_t new_texture_index = (int64_t)frame->data[1];
-    this->m_pDeviceContext->CopySubresourceRegion(this->m_pTexture, 0, 0, 0, 0,  
+    this->m_pDeviceContext->CopySubresourceRegion(this->m_pTexture.Get(), 0, 0, 0, 0, 
                                                 new_texture, new_texture_index, nullptr);
-
-    VERTEX Vertices[NUMVERTICES] = {
-        { XMFLOAT3(-1.0f, -1.0f, 0), XMFLOAT2(0.0f, 1.0f) },
-        { XMFLOAT3(-1.0f, 1.0f, 0), XMFLOAT2(0.0f, 0.0f) },
-        { XMFLOAT3(1.0f, -1.0f, 0), XMFLOAT2(1.0f, 1.0f) },
-        { XMFLOAT3(1.0f, -1.0f, 0), XMFLOAT2(1.0f, 1.0f) },
-        { XMFLOAT3(-1.0f, 1.0f, 0), XMFLOAT2(0.0f, 0.0f) },
-        { XMFLOAT3(1.0f, 1.0f, 0), XMFLOAT2(1.0f, 0.0f) },
-    };
-
-    std::array<ID3D11ShaderResourceView*, 2> const textureViews = {
-        this->m_pLuminanceView, this->m_pChrominanceView
-    };
-
-    // 绑定 NV12 channels to shader
-    // texture id 分别为 0, 1
-    this->m_pDeviceContext->PSSetShaderResources(0, textureViews.size(), textureViews.data());
     
     // Set resources
-    UINT Stride = sizeof(VERTEX);
-    UINT Offset = 0;
     FLOAT blendFactor[4] = { 0.f, 0.f, 0.f, 0.f };
     // 设置混合
     this->m_pDeviceContext->OMSetBlendState(nullptr, blendFactor, 0xffffffff);
-    // 设置渲染目标
-    this->m_pDeviceContext->OMSetRenderTargets(1, &m_pRTV, nullptr);
-    // 设置shader到设备上
-    this->m_pDeviceContext->VSSetShader(m_pVertexShader, nullptr, 0);
-    this->m_pDeviceContext->PSSetShader(m_pPixelShader, nullptr, 0);
-    this->m_pDeviceContext->PSSetSamplers(0, 1, &m_pPSSamplerState);
+    // 将目标渲染视图 和 深度视图合并到管线
+    this->m_pDeviceContext->OMSetRenderTargets(1, m_pRTV.GetAddressOf(), nullptr);
+
     // 将顶点描述为三角形
     this->m_pDeviceContext->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
-
-    D3D11_BUFFER_DESC BufferDec;
-    ZeroMemory(&BufferDec, sizeof(BufferDec));
-    BufferDec.Usage = D3D11_USAGE_DEFAULT;
-    BufferDec.ByteWidth = sizeof(VERTEX) * NUMVERTICES;
-    BufferDec.BindFlags = D3D11_BIND_VERTEX_BUFFER;
-    BufferDec.CPUAccessFlags = 0;
     
-    D3D11_SUBRESOURCE_DATA InitData;
-    ZeroMemory(&InitData, sizeof(InitData));
-    InitData.pSysMem = Vertices;
-
-    ID3D11Buffer * VertexBuffer = nullptr;
-    HRESULT res = this->m_pDevice->CreateBuffer(&BufferDec, &InitData, &VertexBuffer);
-    if (res != 0) {
-        printf("##########CreateBuffer  file: %s,  line: %d, error: %x \n", __FILE__, __LINE__, res);
-    }
-    m_pDeviceContext->IASetVertexBuffers(0, 1, &VertexBuffer, &Stride, &Offset);
     m_pDeviceContext->Draw(NUMVERTICES, 0);
-    
-    VertexBuffer->Release();
-    VertexBuffer = nullptr;
 
-    res = this->m_pSwapChain->Present(0, 0);
+    // 反转后备缓冲
+    HRESULT res = this->m_pSwapChain->Present(0, 0);
     if (res != 0) {
         printf("##########m_pSwapChain->Present  file: %s,  line: %d, error: %x \n", __FILE__, __LINE__, res);
     }
@@ -199,7 +103,7 @@ void CD3DRender::RenderFrame(AVFrame * frame) {
 bool CD3DRender::InitDevice(HWND window, int dialog_width, int dialog_height) {
     D3D_FEATURE_LEVEL feature_level;
     HRESULT res = D3D11CreateDevice(nullptr, D3D_DRIVER_TYPE_HARDWARE, NULL, 0, NULL, 0, D3D11_SDK_VERSION, 
-                    &this->m_pDevice, &feature_level, &this->m_pDeviceContext);
+                    this->m_pDevice.GetAddressOf(), &feature_level, this->m_pDeviceContext.GetAddressOf());
     CHECK_AND_RETURN(res)
 
     // 创建交换链
@@ -218,22 +122,19 @@ bool CD3DRender::InitDevice(HWND window, int dialog_width, int dialog_height) {
     swap_chain_desc.SampleDesc.Quality = 0;     // 置为无效
     swap_chain_desc.Windowed = true;
 
-    IDXGIDevice* dxgi_deivce = nullptr;
-    res = this->m_pDevice->QueryInterface(__uuidof(IDXGIDevice), reinterpret_cast<void**>(&dxgi_deivce));
+    ComPtr<IDXGIDevice> dxgi_deivce = nullptr;
+    res = this->m_pDevice->QueryInterface(__uuidof(IDXGIDevice), 
+                                        reinterpret_cast<void**>(dxgi_deivce.ReleaseAndGetAddressOf()));
     CHECK_AND_RETURN(res)
 
-    IDXGIAdapter* dxgi_adapter = nullptr;
-    res = dxgi_deivce->GetParent(__uuidof(IDXGIAdapter), reinterpret_cast<void**>(&dxgi_adapter));
+    ComPtr<IDXGIAdapter> dxgi_adapter = nullptr;
+    res = dxgi_deivce->GetParent(__uuidof(IDXGIAdapter), reinterpret_cast<void**>(dxgi_adapter.ReleaseAndGetAddressOf()));
     CHECK_AND_RETURN(res)
-    dxgi_deivce->Release();
-    dxgi_deivce = nullptr;
 
-    res = dxgi_adapter->GetParent(__uuidof(m_pFactory), reinterpret_cast<void**>(&this->m_pFactory));
+    res = dxgi_adapter->GetParent(__uuidof(IDXGIFactory), reinterpret_cast<void**>(this->m_pFactory.ReleaseAndGetAddressOf()));
     CHECK_AND_RETURN(res)
-    dxgi_adapter->Release();
-    dxgi_adapter = nullptr;
 
-    res = this->m_pFactory->CreateSwapChain(this->m_pDevice, &swap_chain_desc, &this->m_pSwapChain);
+    res = this->m_pFactory->CreateSwapChain(this->m_pDevice.Get(), &swap_chain_desc, this->m_pSwapChain.GetAddressOf());
     CHECK_AND_RETURN(res)
 
     // this->m_pFactory->MakeWindowAssociation(this->m_iWindow, DXGI_MWA_NO_ALT_ENTER | DXGI_MWA_NO_WINDOW_CHANGES);
@@ -257,19 +158,19 @@ bool CD3DRender::InitShader() {
 
     UINT Size = ARRAYSIZE(g_vertex_shader);
     // 创建输入布局                    布局描述         布局数组长度    包含输入签名顶点shader  shader长度  out
-    HRESULT res = m_pDevice->CreateInputLayout(Layout.data(), Layout.size(), g_vertex_shader, Size, &this->m_pInputLayout);
+    HRESULT res = this->m_pDevice->CreateInputLayout(Layout.data(), Layout.size(), g_vertex_shader, Size, this->m_pInputLayout.GetAddressOf());
     CHECK_AND_RETURN(res)
 
     // 绑定输入布局
-    this->m_pDeviceContext->IASetInputLayout(this->m_pInputLayout);
+    this->m_pDeviceContext->IASetInputLayout(this->m_pInputLayout.Get());
 
     // 初始化顶点着色器
-    res = this->m_pDevice->CreateVertexShader(g_vertex_shader, Size, nullptr, &this->m_pVertexShader);
+    res = this->m_pDevice->CreateVertexShader(g_vertex_shader, Size, nullptr, this->m_pVertexShader.ReleaseAndGetAddressOf());
     CHECK_AND_RETURN(res)
 
     // 初始化片段着色器
     Size = ARRAYSIZE(g_fragment_shader);
-    res = this->m_pDevice->CreatePixelShader(g_fragment_shader, Size, nullptr, &this->m_pPixelShader);
+    res = this->m_pDevice->CreatePixelShader(g_fragment_shader, Size, nullptr, this->m_pPixelShader.ReleaseAndGetAddressOf());
     CHECK_AND_RETURN(res)
 
     // 创建片段采样器
@@ -282,15 +183,52 @@ bool CD3DRender::InitShader() {
    	sample_desc.ComparisonFunc = D3D11_COMPARISON_NEVER;
     sample_desc.MinLOD = 0;
     sample_desc.MaxLOD = D3D11_FLOAT32_MAX;
-    res = this->m_pDevice->CreateSamplerState(&sample_desc, &m_pPSSamplerState);
+    res = this->m_pDevice->CreateSamplerState(&sample_desc, m_pPSSamplerState.ReleaseAndGetAddressOf());
     CHECK_AND_RETURN(res)
+
+    // 填入顶点缓冲
+    VERTEX Vertices[NUMVERTICES] = {
+        { XMFLOAT3(-1.0f, -1.0f, 0), XMFLOAT2(0.0f, 1.0f) },
+        { XMFLOAT3(-1.0f, 1.0f, 0), XMFLOAT2(0.0f, 0.0f) },
+        { XMFLOAT3(1.0f, -1.0f, 0), XMFLOAT2(1.0f, 1.0f) },
+        { XMFLOAT3(1.0f, -1.0f, 0), XMFLOAT2(1.0f, 1.0f) },
+        { XMFLOAT3(-1.0f, 1.0f, 0), XMFLOAT2(0.0f, 0.0f) },
+        { XMFLOAT3(1.0f, 1.0f, 0), XMFLOAT2(1.0f, 0.0f) },
+    };
+
+    UINT Stride = sizeof(VERTEX);
+    UINT Offset = 0;
+
+    D3D11_BUFFER_DESC BufferDec;
+    ZeroMemory(&BufferDec, sizeof(BufferDec));
+    BufferDec.Usage = D3D11_USAGE_DEFAULT;
+    BufferDec.ByteWidth = sizeof(VERTEX) * NUMVERTICES;
+    BufferDec.BindFlags = D3D11_BIND_VERTEX_BUFFER;
+    BufferDec.CPUAccessFlags = 0;
+
+    D3D11_SUBRESOURCE_DATA InitData;
+    ZeroMemory(&InitData, sizeof(InitData));
+    InitData.pSysMem = Vertices;
+
+    res = this->m_pDevice->CreateBuffer(&BufferDec, &InitData, this->VertexBuffer.GetAddressOf());
+    if (res != 0) {
+        printf("##########CreateBuffer  file: %s,  line: %d, error: %x \n", __FILE__, __LINE__, res);
+    }
+    this->m_pDeviceContext->IASetVertexBuffers(0, 1, this->VertexBuffer.GetAddressOf(), &Stride, &Offset);
+
+    // 设备绑定shader
+    this->m_pDeviceContext->VSSetShader(this->m_pVertexShader.Get(), nullptr, 0);
+    this->m_pDeviceContext->PSSetShader(this->m_pPixelShader.Get(), nullptr, 0);
+    this->m_pDeviceContext->PSSetSamplers(0, 1, this->m_pPSSamplerState.GetAddressOf());
 
     return true;
 }
 
 bool CD3DRender::ReinitTexture(DXGI_FORMAT img_format, int texture_width, int texture_height) {
     // 删除共享纹理
-
+    this->m_pTexture.Reset();
+    this->m_pChrominanceView.Reset();
+    this->m_pLuminanceView.Reset();
 
     // 创建共享纹理
     CD3D11_TEXTURE2D_DESC texture_desc = CD3D11_TEXTURE2D_DESC( 
@@ -304,22 +242,31 @@ bool CD3DRender::ReinitTexture(DXGI_FORMAT img_format, int texture_width, int te
         D3D11_CPU_ACCESS_WRITE
     );
 
-    HRESULT res = this->m_pDevice->CreateTexture2D(&texture_desc, nullptr, &m_pTexture);
+    HRESULT res = this->m_pDevice->CreateTexture2D(&texture_desc, nullptr, this->m_pTexture.GetAddressOf());
     CHECK_AND_RETURN(res)
     
     // 亮度通道 y channel
     D3D11_SHADER_RESOURCE_VIEW_DESC luminancePlaneDesc;
-    this->SetShaderResViewDesc(&luminancePlaneDesc, this->m_pTexture, 
+    this->SetShaderResViewDesc(&luminancePlaneDesc, this->m_pTexture.Get(), 
                             D3D11_SRV_DIMENSION_TEXTURE2D, DXGI_FORMAT_R8_UNORM);
-    res = this->m_pDevice->CreateShaderResourceView(this->m_pTexture, &luminancePlaneDesc, &this->m_pLuminanceView);
+    res = this->m_pDevice->CreateShaderResourceView(this->m_pTexture.Get(), &luminancePlaneDesc, this->m_pLuminanceView.GetAddressOf());
     CHECK_AND_RETURN(res)
 
     // 色度通道 uv channel
     D3D11_SHADER_RESOURCE_VIEW_DESC chrominancePlaneDesc;
-    this->SetShaderResViewDesc(&chrominancePlaneDesc, this->m_pTexture, 
+    this->SetShaderResViewDesc(&chrominancePlaneDesc, this->m_pTexture.Get(), 
                             D3D11_SRV_DIMENSION_TEXTURE2D, DXGI_FORMAT_R8G8_UNORM);
-    res = this->m_pDevice->CreateShaderResourceView(this->m_pTexture, &chrominancePlaneDesc, &this->m_pChrominanceView);
+    res = this->m_pDevice->CreateShaderResourceView(this->m_pTexture.Get(), &chrominancePlaneDesc, this->m_pChrominanceView.GetAddressOf());
     CHECK_AND_RETURN(res)
+
+    std::array<ID3D11ShaderResourceView*, 2> const textureViews = {
+        this->m_pLuminanceView.Get(), this->m_pChrominanceView.Get()
+    };
+
+    // 绑定 NV12 channels to shader
+    // 在shader中texture id 分别为 0, 1
+    this->m_pDeviceContext->PSSetShaderResources(0, textureViews.size(), textureViews.data());
+
     return true;
 }
 
