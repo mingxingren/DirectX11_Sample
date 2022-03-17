@@ -70,7 +70,6 @@ _In_ LPSTR lpCmdLine, _In_ int nCmdShow) {
         TranslateMessage(&msg);
         DispatchMessage(&msg);
     }
-
     return 0;
 }
 
