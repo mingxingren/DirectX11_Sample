@@ -51,8 +51,11 @@ private:
     ComPtr<ID3D11VertexShader> m_pVertexShader = nullptr;  // 顶点着色器
     ComPtr<ID3D11PixelShader> m_pPixelShader = nullptr;    // 片段着色器
     ComPtr<ID3D11InputLayout> m_pInputLayout = nullptr;
-    ComPtr<ID3D11SamplerState> m_pPSSamplerState = nullptr;    // 判断着色采样
+    ComPtr<ID3D11SamplerState> m_pPSSamplerState = nullptr;    // 片段着色采样
     ComPtr<ID3D11Buffer> VertexBuffer = nullptr;
+
+    int texture_width = 0;
+    int texture_height = 0;
 };
 
 #endif //D3DRENDER_H

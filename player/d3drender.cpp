@@ -42,10 +42,10 @@ bool CD3DRender::Init(HWND window) {
         return false;
     }
    
-    // 初始化 Texture
-    if (!this->ReinitTexture(DXGI_FORMAT_NV12, TEXTURE_WIDTH, TEXTURE_HEIGHT)) {
-        return false;
-    }
+    // // 初始化 Texture
+    // if (!this->ReinitTexture(DXGI_FORMAT_NV12, TEXTURE_WIDTH, TEXTURE_HEIGHT)) {
+    //     return false;
+    // }
 
     // 创建渲染目标
     ComPtr<ID3D11Texture2D> back_buffer = nullptr;
@@ -75,6 +75,12 @@ void CD3DRender::SetViewport(UINT32 width, UINT32 height) {
 }
 
 void CD3DRender::RenderFrame(AVFrame * frame) {
+    if (this->texture_width != frame->width || this->texture_height != frame->height) {
+        this->texture_width = frame->width;
+        this->texture_height = frame->height;
+        this->ReinitTexture(DXGI_FORMAT_NV12, this->texture_width, this->texture_height);
+    }
+
     // 将FFMPEG的数据拷入到共享纹理中
     ID3D11Texture2D* new_texture= (ID3D11Texture2D*)frame->data[0];
     int64_t new_texture_index = (int64_t)frame->data[1];
@@ -87,6 +93,7 @@ void CD3DRender::RenderFrame(AVFrame * frame) {
     this->m_pDeviceContext->OMSetBlendState(nullptr, blendFactor, 0xffffffff);
     // 将目标渲染视图 和 深度视图合并到管线
     this->m_pDeviceContext->OMSetRenderTargets(1, m_pRTV.GetAddressOf(), nullptr);
+
 
     // 将顶点描述为三角形
     this->m_pDeviceContext->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
@@ -278,6 +285,8 @@ void CD3DRender::SetShaderResViewDesc(D3D11_SHADER_RESOURCE_VIEW_DESC* desc,
                                     UINT mipLevels,
                                     UINT firstArraySlice, // First2DArrayFace for TEXTURECUBEARRAY
                                     UINT arraySize) {
+                                        // D3D11_SRV_DIMENSION_TEXTURE2D
+
     desc->ViewDimension = viewDimension;
     if (DXGI_FORMAT_UNKNOWN == format || 
         (-1 == mipLevels &&
