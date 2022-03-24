@@ -35,13 +35,13 @@ int main() {
     HWND window_handle = info.info.win.window;
 
     // 创建渲染设备
-    CD3DRender render;
-    if (!render.Init(window_handle)) {
-        return 0;
-    }
+    // CD3DRender render;
+    // if (!render.Init(window_handle)) {
+    //     return 0;
+    // }
 
     // 创建解码线程
-    CDecodeThd decode_thread("C:\\Users\\MMK\\Desktop\\DDATest_3.h264", &render);
+    CDecodeThd decode_thread("C:\\Users\\MMK\\Desktop\\DDATest_3.h264", window_handle);
     decode_thread.StartThd();
 
     // 消息循环

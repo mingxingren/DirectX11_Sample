@@ -13,9 +13,19 @@ extern "C" {
 
 AVPixelFormat CDecodeThd::m_eHwPixFmt = AV_PIX_FMT_NONE;
 
-CDecodeThd::CDecodeThd(const std::string &file_path, CD3DRender* render) 
-: m_sFileName(file_path), m_pRenderDevice(render) {
+CDecodeThd::CDecodeThd(const std::string &file_path, HWND window_handle) 
+: m_sFileName(file_path), m_window_handle(window_handle) {
 
+}
+
+CDecodeThd::~CDecodeThd() {
+    if (this->m_pHwDeviceCtx) {
+        av_buffer_unref(&this->m_pHwDeviceCtx);
+    }
+
+    if (this->m_pCodeContext) {
+        avcodec_free_context(&this->m_pCodeContext);
+    }
 }
 
 void CDecodeThd::StartThd(){
@@ -25,6 +35,11 @@ void CDecodeThd::StartThd(){
 }
 
 void CDecodeThd::run(){
+    this->m_pRenderDevice = new CD3DRender();
+    if (!this->m_pRenderDevice->Init(this->m_window_handle)) {
+        return;
+    }
+
     _GetViodeSupportHWDevices();
 
     AVFormatContext *pFormatContex = nullptr;
@@ -145,6 +160,21 @@ void CDecodeThd::run(){
     float average_time = (float)total_time / (float)frame_count;
     printf("total frame count: %d , total_time: %d average cost time every frame: %f \n", frame_count, total_time, average_time);
     ::av_packet_free(&pPack);
+    ::av_frame_free(&pHwFrame);
+
+    if (this->m_pHwDeviceCtx) {
+        AVHWDeviceContext* device_ctx = reinterpret_cast<AVHWDeviceContext*>(this->m_pHwDeviceCtx->data);
+        AVD3D11VADeviceContext* d3d11va_device = reinterpret_cast<AVD3D11VADeviceContext*>(device_ctx->hwctx);
+        d3d11va_device->device = nullptr;
+        av_buffer_unref(&this->m_pHwDeviceCtx);
+    }
+
+    if (this->m_pCodeContext) {
+        avcodec_free_context(&this->m_pCodeContext);
+    }
+
+    delete this->m_pRenderDevice;
+    this->m_pRenderDevice = nullptr;
 }
 
 void CDecodeThd::_InitVideoFormat(AVFormatContext *_pAVFormatContext, int _iStreamIndex,
@@ -173,8 +203,8 @@ void CDecodeThd::_InitVideoFormat(AVFormatContext *_pAVFormatContext, int _iStre
     if (iRet != 0) {
         printf("#######################av_hwdevice_ctx_init fail \n");
     }
-    m_pCodeContext->hw_device_ctx = av_buffer_ref(hw_device_ctx);
     m_pHwDeviceCtx = hw_device_ctx;
+    m_pCodeContext->hw_device_ctx = av_buffer_ref(hw_device_ctx);
 
     iRet = ::avcodec_open2(m_pCodeContext, pCodec, NULL);
     if (iRet < 0) {

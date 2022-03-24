@@ -19,8 +19,8 @@ extern "C"{
 
 class CDecodeThd {
 public:
-    CDecodeThd(const std::string &file_path, CD3DRender* render);
-    ~CDecodeThd() = default;
+    CDecodeThd(const std::string &file_path, HWND window_handle);
+    ~CDecodeThd();
     CDecodeThd(const CDecodeThd&) = delete;
     CDecodeThd& operator=(const CDecodeThd&) = delete;
     void StartThd();
@@ -56,6 +56,7 @@ private:
 
     std::string m_sFileName;
     CD3DRender* m_pRenderDevice = nullptr;    // d3ddevice 
+    HWND m_window_handle;       // window 
 };
 
 
