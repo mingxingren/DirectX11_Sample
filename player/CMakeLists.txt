@@ -10,10 +10,10 @@ enable_testing()
 
 include_directories($ENV{FFMPEG_INCLUDE_DIR})
 
-add_executable(window_texture main.cpp d3drender.cpp decode/decode_thd.cpp)
+add_executable(window_texture main.cpp d3drender.cpp performance_clock.cpp decode/decode_thd.cpp)
 
 target_link_libraries(window_texture -lstdc++fs)
-target_link_libraries(window_texture d3d11.lib D3D11.lib D3DCompiler.lib)
+target_link_libraries(window_texture d3d11.lib dxgi.lib)
 target_link_directories(window_texture PRIVATE $ENV{FFMPEG_LIB_DIR})
 target_link_libraries(window_texture avcodec.lib avformat.lib avutil.lib)
 

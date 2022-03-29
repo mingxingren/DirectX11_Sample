@@ -1,7 +1,9 @@
 #include "d3drender.h"
 #include <array>
 #include <iostream>
+#include <vector>
 #include "common_type.h"
+#include "time.h"
 #include "shader/fragment_shader.inc"
 #include "shader/vertex_shader.inc"
 
@@ -84,9 +86,25 @@ void CD3DRender::RenderFrame(AVFrame * frame) {
     // 将FFMPEG的数据拷入到共享纹理中
     ID3D11Texture2D* new_texture= (ID3D11Texture2D*)frame->data[0];
     int64_t new_texture_index = (int64_t)frame->data[1];
-    this->m_pDeviceContext->CopySubresourceRegion(this->m_pTexture.Get(), 0, 0, 0, 0, 
-                                                new_texture, new_texture_index, nullptr);
-    
+
+	ComPtr<ID3D11Device> device;
+	new_texture->GetDevice(device.GetAddressOf());
+
+	ComPtr<ID3D11DeviceContext> deviceCtx;
+	device->GetImmediateContext(&deviceCtx);
+
+	ComPtr<ID3D11Texture2D> videoTexture;
+	HRESULT res_handle = device->OpenSharedResource(this->m_pTextureShareHandle, __uuidof(ID3D11Texture2D), (void**)&videoTexture);
+    if (res_handle != S_OK) {
+        printf("##########file: %s,  line: %d, error: %x \n", __FILE__, __LINE__, res_handle);
+    }
+
+	deviceCtx->CopySubresourceRegion(videoTexture.Get(), 0, 0, 0, 0, new_texture, new_texture_index, 0);
+	deviceCtx->Flush();
+
+    // this->m_pDeviceContext->CopySubresourceRegion(this->m_pTexture.Get(), 0, 0, 0, 0, new_texture, new_texture_index, nullptr);
+
+    // Timer clock;
     // Set resources
     FLOAT blendFactor[4] = { 0.f, 0.f, 0.f, 0.f };
     // 设置混合
@@ -94,13 +112,13 @@ void CD3DRender::RenderFrame(AVFrame * frame) {
     // 将目标渲染视图 和 深度视图合并到管线
     this->m_pDeviceContext->OMSetRenderTargets(1, m_pRTV.GetAddressOf(), nullptr);
 
-
     // 将顶点描述为三角形
     this->m_pDeviceContext->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
     
     m_pDeviceContext->Draw(NUMVERTICES, 0);
 
-    // 反转后备缓冲
+    // // // 反转后备缓冲
+    // // this->m_pDeviceContext->Flush();
     HRESULT res = this->m_pSwapChain->Present(0, 0);
     if (res != 0) {
         printf("##########m_pSwapChain->Present  file: %s,  line: %d, error: %x \n", __FILE__, __LINE__, res);
@@ -109,10 +127,15 @@ void CD3DRender::RenderFrame(AVFrame * frame) {
 
 bool CD3DRender::InitDevice(HWND window, int dialog_width, int dialog_height) {
     D3D_FEATURE_LEVEL feature_level;
-    HRESULT res = D3D11CreateDevice(nullptr, D3D_DRIVER_TYPE_HARDWARE, NULL, 0, NULL, 0, D3D11_SDK_VERSION, 
-                    this->m_pDevice.GetAddressOf(), &feature_level, this->m_pDeviceContext.GetAddressOf());
-    CHECK_AND_RETURN(res)
+    this->pCurAdapter = this->ListGPUDevice();
+    HRESULT res = D3D11CreateDevice(pCurAdapter.Get(), pCurAdapter.Get() == nullptr ? D3D_DRIVER_TYPE_HARDWARE : D3D_DRIVER_TYPE_UNKNOWN, 
+                                    NULL, 0, NULL, 0, D3D11_SDK_VERSION, 
+                                    this->m_pDevice.GetAddressOf(), &feature_level,  this->m_pDeviceContext.GetAddressOf());
 
+    // HRESULT res = D3D11CreateDevice(nullptr, D3D_DRIVER_TYPE_HARDWARE, NULL, 0, NULL, 0, D3D11_SDK_VERSION, 
+    // this->m_pDevice.GetAddressOf(), &feature_level,  this->m_pDeviceContext.GetAddressOf());
+    CHECK_AND_RETURN(res)
+    
     // 创建交换链
     DXGI_SWAP_CHAIN_DESC swap_chain_desc;
     ZeroMemory(&swap_chain_desc, sizeof(swap_chain_desc));
@@ -128,6 +151,7 @@ bool CD3DRender::InitDevice(HWND window, int dialog_width, int dialog_height) {
     swap_chain_desc.SampleDesc.Count = 1;       // 置为无效
     swap_chain_desc.SampleDesc.Quality = 0;     // 置为无效
     swap_chain_desc.Windowed = true;
+    // swap_chain_desc.Flags = DXGI_SWAP_CHAIN_FLAG_FRAME_LATENCY_WAITABLE_OBJECT | DXGI_SWAP_CHAIN_FLAG_ALLOW_TEARING;
 
     ComPtr<IDXGIDevice> dxgi_deivce = nullptr;
     res = this->m_pDevice->QueryInterface(__uuidof(IDXGIDevice), 
@@ -245,13 +269,21 @@ bool CD3DRender::ReinitTexture(DXGI_FORMAT img_format, int texture_width, int te
         1,
         1,
         D3D11_BIND_SHADER_RESOURCE,
-        D3D11_USAGE_DYNAMIC,
-        D3D11_CPU_ACCESS_WRITE
+        D3D11_USAGE_DEFAULT,
+        0
     );
+    texture_desc.MiscFlags = D3D11_RESOURCE_MISC_SHARED;
 
     HRESULT res = this->m_pDevice->CreateTexture2D(&texture_desc, nullptr, this->m_pTexture.GetAddressOf());
     CHECK_AND_RETURN(res)
+
+    ComPtr<IDXGIResource> dxgiShareTexture;
+    res = this->m_pTexture->QueryInterface(__uuidof(IDXGIResource), (void**)dxgiShareTexture.GetAddressOf());
+    CHECK_AND_RETURN(res)
     
+    res = dxgiShareTexture->GetSharedHandle(&this->m_pTextureShareHandle);
+    CHECK_AND_RETURN(res)
+
     // 亮度通道 y channel
     D3D11_SHADER_RESOURCE_VIEW_DESC luminancePlaneDesc;
     this->SetShaderResViewDesc(&luminancePlaneDesc, this->m_pTexture.Get(), 
@@ -264,6 +296,36 @@ bool CD3DRender::ReinitTexture(DXGI_FORMAT img_format, int texture_width, int te
     this->SetShaderResViewDesc(&chrominancePlaneDesc, this->m_pTexture.Get(), 
                             D3D11_SRV_DIMENSION_TEXTURE2D, DXGI_FORMAT_R8G8_UNORM);
     res = this->m_pDevice->CreateShaderResourceView(this->m_pTexture.Get(), &chrominancePlaneDesc, this->m_pChrominanceView.GetAddressOf());
+    CHECK_AND_RETURN(res)
+
+    std::array<ID3D11ShaderResourceView*, 2> const textureViews = {
+        this->m_pLuminanceView.Get(), this->m_pChrominanceView.Get()
+    };
+
+    // 绑定 NV12 channels to shader
+    // 在shader中texture id 分别为 0, 1
+    this->m_pDeviceContext->PSSetShaderResources(0, textureViews.size(), textureViews.data());
+
+    return true;
+}
+
+bool CD3DRender::ResetTargetView(ID3D11Texture2D* texture_begin, int index) {
+    // 删除共享纹理
+    this->m_pChrominanceView.Reset();
+    this->m_pLuminanceView.Reset();
+    
+    // 亮度通道 y channel
+    D3D11_SHADER_RESOURCE_VIEW_DESC luminancePlaneDesc;
+    this->SetShaderResViewDesc(&luminancePlaneDesc, texture_begin, 
+                            D3D11_SRV_DIMENSION_TEXTURE2D, DXGI_FORMAT_R8_UNORM);
+    HRESULT res = this->m_pDevice->CreateShaderResourceView(this->m_pTexture.Get(), &luminancePlaneDesc, this->m_pLuminanceView.GetAddressOf());
+    CHECK_AND_RETURN(res)
+
+    // 色度通道 uv channel
+    D3D11_SHADER_RESOURCE_VIEW_DESC chrominancePlaneDesc;
+    this->SetShaderResViewDesc(&chrominancePlaneDesc, texture_begin, 
+                            D3D11_SRV_DIMENSION_TEXTURE2D, DXGI_FORMAT_R8G8_UNORM);
+    res = this->m_pDevice->CreateShaderResourceView(texture_begin, &chrominancePlaneDesc, this->m_pChrominanceView.GetAddressOf());
     CHECK_AND_RETURN(res)
 
     std::array<ID3D11ShaderResourceView*, 2> const textureViews = {
@@ -340,3 +402,82 @@ void CD3DRender::SetShaderResViewDesc(D3D11_SHADER_RESOURCE_VIEW_DESC* desc,
     }
 }
 
+std::string WStringToString(const std::wstring &wstr)
+{
+    std::string str(wstr.length(), ' ');
+    std::copy(wstr.begin(), wstr.end(), str.begin());
+    return str;
+}
+
+ComPtr<IDXGIAdapter> CD3DRender::ListGPUDevice() {
+    ComPtr<IDXGIFactory1> pFactory;
+        // 创建一个DXGI工厂  
+    HRESULT hr = CreateDXGIFactory1(__uuidof(IDXGIFactory1), (void**)(pFactory.ReleaseAndGetAddressOf()));
+
+    if (FAILED(hr)) {
+        return nullptr;
+    }
+
+    ComPtr<IDXGIAdapter> pAdapter;
+    ComPtr<IDXGIAdapter> pCurrentAdapter = nullptr;
+    std::vector <ComPtr<IDXGIAdapter>> vAdapters;            // 显卡           
+    int iAdapterNum = 0; // 显卡的数量 
+
+    // 枚举适配器  
+    while (pFactory->EnumAdapters(iAdapterNum, pAdapter.GetAddressOf()) != DXGI_ERROR_NOT_FOUND)
+    {
+        vAdapters.push_back(pAdapter);
+        ++iAdapterNum;
+    }
+
+    SIZE_T iMaxDedicatedVideoMemory = 0;
+    int index = 0;
+
+    // 信息输出   
+    std::cout << TEXT("get cpu nums:") << iAdapterNum <<  std::endl;
+    for (size_t i = 0; i < vAdapters.size(); i++)
+    {
+        ComPtr<IDXGIAdapter1> pAdapter1 = nullptr;
+        vAdapters[i]->QueryInterface(__uuidof(IDXGIAdapter1), reinterpret_cast<void**>(pAdapter1.ReleaseAndGetAddressOf()));
+
+        // 获取信息  
+        DXGI_ADAPTER_DESC1 adapterDesc;
+        pAdapter1->GetDesc1(&adapterDesc);
+        std::wstring aa(adapterDesc.Description);
+
+        std::string deivce_name = WStringToString(aa);
+        
+        if (deivce_name.find("NVIDIA") != std::string::npos) {
+            std::cout << "find NVIDIA adapter: " << deivce_name << std::endl;
+            ComPtr<ID3D11Device> d3d11_device;
+            hr = D3D11CreateDevice(pAdapter1.Get(), D3D_DRIVER_TYPE_UNKNOWN, NULL, 0, NULL, 0, D3D11_SDK_VERSION, d3d11_device.GetAddressOf(), nullptr, nullptr);
+            if (FAILED(hr)) {
+                return nullptr;
+            }
+
+            ComPtr<ID3D11VideoContext> d3d11_video_device;
+            hr = d3d11_device->QueryInterface(__uuidof(ID3D11VideoDevice), reinterpret_cast<void**>(d3d11_video_device.ReleaseAndGetAddressOf()));
+            if (FAILED(hr)) {
+                return nullptr;
+            }
+
+            pCurrentAdapter = vAdapters[i];
+            m_iCurAdapterIndex = i;
+        }
+
+        // 输出显卡信息
+        std::cout << TEXT("device describe: ") <<  WStringToString(aa) << "  " << vAdapters[i] << std::endl;
+        std::cout << TEXT("VendorId: ") << adapterDesc.VendorId << std::endl;
+        std::cout << TEXT("DeviceId: ") << adapterDesc.DeviceId << std::endl;
+        std::cout << TEXT("SubSysId: ") << adapterDesc.SubSysId << std::endl;
+        std::cout << TEXT("Revision: ") << adapterDesc.Revision << std::endl;
+        std::cout << TEXT("system video memory: ") << adapterDesc.DedicatedSystemMemory / 1024 / 1024 << "M" << std::endl;
+        std::cout << TEXT("zhuanyong video memory: ") << adapterDesc.DedicatedVideoMemory / 1024 / 1024 << "M" << std::endl;
+        std::cout << TEXT("shared system memory: ") << adapterDesc.SharedSystemMemory / 1024 / 1024 << "M" << std::endl;
+        std::cout << TEXT("flag: ") << adapterDesc.Flags << std::endl;
+
+        std::cout << std::endl;
+    }
+    vAdapters.clear();
+    return pCurrentAdapter;
+}

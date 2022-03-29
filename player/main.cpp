@@ -61,7 +61,7 @@ _In_ LPSTR lpCmdLine, _In_ int nCmdShow) {
     }
 
     // 创建解码线程
-    CDecodeThd decode_thread("C:\\Users\\MMK\\Desktop\\DDATest_3.h264", &render);
+    CDecodeThd decode_thread("DDATest_3.h264", &render);
     decode_thread.StartThd();
 
     // 消息循环
